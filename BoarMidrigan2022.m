@@ -61,19 +61,22 @@ Params.p=2.2e-6; % probability to enter the super-star state
 Params.q=0.990; % probability to stay in the super-star state
 Params.zbar=504.3; % ability super-star state relative to mean
 
-% Following parameters are deteremined in general eqm, these are just initial guesses
-Params.r=0.05; % 0.035
-% Params.iota=0.1; % 0.31
-Params.B=1; % 1.84
-Params.G=0.2; % 0.025
+% Following parameters are deteremined in general eqm, these are just
+% initial guesses (I had worse guesses on the first run, these are updated
+% so the initial general eqm is quicker to solve by using decent guesses)
+Params.r=0.05;   % 0.035
+Params.iota=0.3; % 0.31
+Params.B=1.8;    % 1.84
+Params.G=0.05;   % 0.025
 
 %% Grids
 d_grid=linspace(0,1,n_d)'; % labor supply
 
-Params.maxa=40; % max assets [10 is the max on the x-axis of Fig 4, so seems reasonable? Solved model, clearly too low as people hit the top; later on, turns out Fig 4 x-axis was 'relative to mean wealth', so no wonder the 10 was too low]
+Params.maxa=40; % max assets [10 is the max on the x-axis of Fig 4, so seems reasonable? Solved model, clearly too low as people hit the top]
 a_grid=Params.maxa*(linspace(0,1,n_a)'.^3); % assets: 0 to max, ^3 adds curvature so more points near 0
 
-[z_grid_pre,pi_z_pre]=discretizeAR1_FarmerToda(0,Params.rho_z,Params.sigma_e,n_z-1);
+
+[z_grid_pre,pi_z_pre]=discretizeAR1_FarmerToda(0,Params.rho_z,Params.sigma_e,n_z-1); % BM2022 used Rouwenhorst
 % Make it so that mean of z is 1
 z_grid_pre=exp(z_grid_pre);
 [meanz,~,~,~]=MarkovChainMoments(z_grid_pre,pi_z_pre);
@@ -86,6 +89,7 @@ pi_z=[(1-Params.p)*pi_z_pre, Params.p*ones(n_z-1,1); (1-Params.q)*statdistz', Pa
 % state with a constant probability p and remain there with probability q.
 % When agents return to the normal state, they draw a new ability from the
 % ergodic distribution associated with the AR(1) process."
+
 
 %% Return fn and discount factor
 DiscountFactorParamNames={'beta'};
@@ -104,7 +108,7 @@ tic;
 vftime=toc
 
 %% Test for Agent Dist
-StationartyDist=StationaryDist_Case1(Policy,n_d,n_a,n_z,pi_z,simoptions);
+StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_z,pi_z,simoptions);
 
 %% Setup model moments
 FnsToEvaluate.K=@(h,aprime,a,z) a;
@@ -112,16 +116,17 @@ FnsToEvaluate.L=@(h,aprime,a,z) h*z;
 FnsToEvaluate.TaxRevenue=@(h,aprime,a,z,r,tau,xi,iota,delta,alpha,tau_a,xi_a) BM2022_IncomeTaxRevenue(h,aprime,a,z,r,tau,xi,iota,delta,alpha) + BM2022_WealthTaxRevenue(h,aprime,a,z,tau_a,xi_a);
 
 % Test the model moments
-AggVars=EvalFnOnAgentDist_AggVars_Case1(StationartyDist,Policy,FnsToEvaluate,Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,simoptions);
+AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist,Policy,FnsToEvaluate,Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,simoptions);
 
 %% Solve initial stationary general eqm
 GEPriceParamNames_pre={'r','iota','B','G'};
 
 GeneralEqmEqns_pre.capitalmarket=@(r,K,L,alpha,delta) r-(alpha*(K^(alpha-1))*(L^(1-alpha))-delta); % interest rate equals marginal product of capital (net of depreciation)
 GeneralEqmEqns_pre.iotacalib=@(iota,iota_target,K,L,alpha) iota_target - iota/((K^(alpha))*(L^(1-alpha))); % get iota to GDP-per-capita ratio correct
-GeneralEqmEqns_pre.govdebtcalib=@(Bbar,B,K,L,alpha) Bbar - B/((K^(alpha))*(L^(1-alpha))); % Gov Debt-to-GDP ratio of Bbar
-GeneralEqmEqns_pre.govbudget=@(r,B,G,TaxRevenue) (1+r)*B+G-(B+TaxRevenue); % Balance the goverment budget
 % Note: because iota is same for everyone, just use it directly here rather than needing to calculate it as an aggregate var.
+GeneralEqmEqns_pre.govbudget=@(r,B,G,TaxRevenue) (1+r)*B+G-(B+TaxRevenue); % Balance the goverment budget
+% Include the calibration target as a general eqm constraint
+GeneralEqmEqns_pre.govdebtcalib=@(Bbar,B,K,L,alpha) Bbar - B/((K^(alpha))*(L^(1-alpha))); % Gov Debt-to-GDP ratio of Bbar
 
 heteroagentoptions.verbose=1;
 [p_eqm_init,GECondns_init]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_z, 0, pi_z, d_grid, a_grid, z_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns_pre, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames_pre,heteroagentoptions, simoptions, vfoptions);
@@ -177,7 +182,9 @@ Params.tau_a=-0.002; % wealth tax
 Params.xi_a=0.0017;
 
 %% Final stationary general eqm
+tic;
 [p_eqm_final,GECondns_final]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_z, 0, pi_z, d_grid, a_grid, z_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames,heteroagentoptions, simoptions, vfoptions);
+GEtime2=toc
 % Update Params based on general eqm
 Params.r=p_eqm_final.r;
 Params.iota=p_eqm_final.iota;
@@ -205,6 +212,8 @@ ParamPath.xi_a=Params.xi_a*ones(1,T);
 % Same as before, except that the government budget now has to be explicit that it is last period gov debt.
 GeneralEqmEqns_TransPath.capitalmarket=GeneralEqmEqns.capitalmarket;
 GeneralEqmEqns_TransPath.govbudget=@(r,B,B_tminus1,G,TaxRevenue) (1+r)*B_tminus1+G-(B+TaxRevenue);
+% Note: BM2022 are solving for a path where B is constant over time, but I
+% still want to write out B_tminus1 so that it would still work for other setups.
 
 transpathoptions.GEnewprice=3;
 % Need to explain to transpathoptions how to use the GeneralEqmEqns to update the general eqm transition prices (in PricePath).
@@ -223,7 +232,9 @@ vfoptions.divideandconquer=1;
 vfoptions.level1n=15;
 
 transpathoptions.verbose=1;
+tic;
 PricePath=TransitionPath_Case1(PricePath0, ParamPath, T, V_final, StationaryDist_init, n_d, n_a, n_z, pi_z, d_grid,a_grid,z_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, transpathoptions, vfoptions, simoptions);
+tpathtime=toc
 
 [VPath,PolicyPath]=ValueFnOnTransPath_Case1(PricePath, ParamPath, T, V_final, Policy_final, Params, n_d, n_a, n_z, pi_z, d_grid, a_grid,z_grid, DiscountFactorParamNames, ReturnFn, transpathoptions, vfoptions);
 
