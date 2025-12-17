@@ -69,7 +69,8 @@ Params.B=1.8;    % 1.84
 Params.G=0.05;   % 0.025
 
 %% Grids
-d_grid=linspace(0,1,n_d)'; % labor supply
+maxh=1.3; % I set this to 2, solved initial and final stationary eqm, and based on those no-one chooses more than 1.2, so using 1.3 as the max
+d_grid=linspace(0,maxh,n_d)'; % labor supply
 
 Params.maxa=100; % max assets [10 is the max on the x-axis of Fig 4, so seems reasonable? Solved model, clearly too low as people hit the top; later on, turns out Fig 4 x-axis was 'relative to mean wealth', so no wonder 10 was too low]
 a_grid=Params.maxa*(linspace(0,1,n_a)'.^3); % assets: 0 to max, ^3 adds curvature so more points near 0
@@ -211,6 +212,7 @@ title('cdf of assets in stationary general eqm (check not hitting the top of gri
 
 
 save BM2022pre.mat
+
 
 %% Solve the transition path
 T=100; % BM2022 Fig 3 has this as x-axis, so seems appropriate
