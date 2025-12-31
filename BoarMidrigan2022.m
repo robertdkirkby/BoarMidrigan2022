@@ -69,10 +69,10 @@ Params.B=1.8;    % 1.84
 Params.G=0.05;   % 0.025
 
 %% Grids
-maxh=1.3; % I set this to 2, solved initial and final stationary eqm, and based on those no-one chooses more than 1.2, so using 1.3 as the max
+maxh=1.5; % I set this to 2, solved initial and final stationary eqm, and based on those no-one chooses more than 1.2ish, so using 1.5 as the max
 d_grid=linspace(0,maxh,n_d)'; % labor supply
 
-Params.maxa=100; % max assets [10 is the max on the x-axis of Fig 4, so seems reasonable? Solved model, clearly too low as people hit the top; later on, turns out Fig 4 x-axis was 'relative to mean wealth', so no wonder 10 was too low]
+Params.maxa=1200; % max assets
 a_grid=Params.maxa*(linspace(0,1,n_a)'.^3); % assets: 0 to max, ^3 adds curvature so more points near 0
 
 
@@ -113,7 +113,7 @@ StationaryDist=StationaryDist_Case1(Policy,n_d,n_a,n_z,pi_z,simoptions);
 %% Setup model moments
 FnsToEvaluate.A=@(h,aprime,a,z) a;
 FnsToEvaluate.L=@(h,aprime,a,z) h*z;
-FnsToEvaluate.TaxRevenue=@(h,aprime,a,z,r,tau,xi,iota,delta,alpha,tau_a,xi_a) BM2022_IncomeTaxRevenue(h,aprime,a,z,r,tau,xi,iota,delta,alpha) + BM2022_WealthTaxRevenue(h,aprime,a,z,tau_a,xi_a);
+FnsToEvaluate.TaxRevenue=@(h,aprime,a,z,r,tau_s,tau,xi,tau_a,xi_a,iota,delta,alpha) BM2022_IncomeTaxRevenue(h,aprime,a,z,r,tau,xi,iota,delta,alpha) + BM2022_WealthTaxRevenue(h,aprime,a,z,tau_a,xi_a) + tau_s*BM2022_Consumption(h,aprime,a,z,r,tau_s,tau,xi,tau_a,xi_a,iota,delta,alpha);
 
 % Test the model moments
 AggVars=EvalFnOnAgentDist_AggVars_Case1(StationaryDist,Policy,FnsToEvaluate,Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,simoptions);
@@ -147,8 +147,10 @@ StationaryDist_init=StationaryDist_Case1(Policy_init,n_d,n_a,n_z,pi_z,simoptions
 % Add some further FnsToEvaluate so can plot the kinds of outputs shown in Figure 3
 FnsToEvaluate2=FnsToEvaluate;
 FnsToEvaluate2.Consumption=@(h,aprime,a,z,r,tau_s,tau,xi,tau_a,xi_a,iota,delta,alpha) BM2022_Consumption(h,aprime,a,z,r,tau_s,tau,xi,tau_a,xi_a,iota,delta,alpha);
+FnsToEvaluate2.Income=@(h,aprime,a,z,r,delta,alpha) BM2022_PreTaxIncome(h,aprime,a,z,r,delta,alpha);
 
 AggVars_init=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_init,Policy_init,FnsToEvaluate2,Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,simoptions);
+simoptions.npoints=1000; % so we can get the top 0.1% shares (default is 100)
 AllStats_init=EvalFnOnAgentDist_AllStats_Case1(StationaryDist_init,Policy_init,FnsToEvaluate2,Params,[],n_d,n_a,n_z,d_grid,a_grid,z_grid,simoptions);
 
 K_init=AggVars_init.A.Mean-Params.B;
@@ -159,6 +161,30 @@ C_t=AggVars_init.Consumption.Mean;
 C_tplus1=AggVars_init.Consumption.Mean^(-Params.theta); % C_t and C_t+1 are same thing in stationary general eqm
 laborwedge_init=wage_init*(C_t^(-Params.theta))/(AggVars.L.Mean^Params.gamma); % Rearrange eqn at bottom of page 80 for varthetabar
 savingswedge_init=Params.beta*(1+Params.r)*(C_t^(-Params.theta))/(C_tplus1^(-Params.theta)); % Rearrange eqn (4) on pg 81 to get zetabar_t, the aggregate capital wedge 
+
+% Report some income and wealth inequality stats
+fprintf('Some model stats \n')
+fprintf('Wealth Distribution \n')
+fprintf('  Agg. Wealth-to-Income Ratio: %8.4f \n', AllStats_init.A.Mean/AllStats_init.Income.Mean)
+fprintf('  Gini of Wealth: %8.4f \n', AllStats_init.A.Gini)
+fprintf('  Top 0.1p Wealth Share: %8.4f \n', 1-AllStats_init.A.LorenzCurve(999))
+fprintf('  Top 1p Wealth Share: %8.4f \n', 1-AllStats_init.A.LorenzCurve(990))
+fprintf('  Top 5p Wealth Share: %8.4f \n', 1-AllStats_init.A.LorenzCurve(950))
+fprintf('  Top 10p Wealth Share: %8.4f \n', 1-AllStats_init.A.LorenzCurve(900))
+fprintf('  Bottom 75p Wealth Share: %8.4f \n', AllStats_init.A.LorenzCurve(750))
+fprintf('  Bottom 50p Wealth Share: %8.4f \n', AllStats_init.A.LorenzCurve(500))
+fprintf('  Bottom 25p Wealth Share: %8.4f \n', AllStats_init.A.LorenzCurve(250))
+fprintf('Income Distribution \n')
+fprintf('  Gini of Income: %8.4f \n', AllStats_init.Income.Gini)
+fprintf('  Top 0.1p Income Share: %8.4f \n', 1-AllStats_init.Income.LorenzCurve(999))
+fprintf('  Top 1p Income Share: %8.4f \n', 1-AllStats_init.Income.LorenzCurve(990))
+fprintf('  Top 5p Income Share: %8.4f \n', 1-AllStats_init.Income.LorenzCurve(950))
+fprintf('  Top 10p Income Share: %8.4f \n', 1-AllStats_init.Income.LorenzCurve(900))
+fprintf('  Bottom 75p Income Share: %8.4f \n', AllStats_init.Income.LorenzCurve(750))
+fprintf('  Bottom 50p Income Share: %8.4f \n', AllStats_init.Income.LorenzCurve(500))
+fprintf('  Bottom 25p Income Share: %8.4f \n', AllStats_init.Income.LorenzCurve(250))
+
+
 
 %% From now on, just keep G and B unchanged
 GEPriceParamNames={'r','iota'};
