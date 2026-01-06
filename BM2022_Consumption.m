@@ -9,6 +9,6 @@ wealthtax=a-((1-tau_a)/(1-xi_a))*(a^(1-xi_a));
 
 resources=(pretaxincome-incometax)+(a-wealthtax)-aprime;
 
-c=resources/(1-tau_s); % consumption
+c=resources/(1+tau_s); % consumption
 
 end
